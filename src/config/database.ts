@@ -2,10 +2,12 @@ import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { config } from './index';
 import { schemaStatements, triggerStatements } from '../database/schema';
 
+const useSsl = Boolean(config.database.url) || config.nodeEnv === 'production';
+
 const poolConfig = config.database.url
   ? {
       connectionString: config.database.url,
-      ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false
+      ssl: useSsl ? { rejectUnauthorized: false } : false
     }
   : {
       host: config.database.host,
@@ -13,7 +15,7 @@ const poolConfig = config.database.url
       user: config.database.username,
       password: config.database.password,
       database: config.database.database,
-      ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : false
+      ssl: useSsl ? { rejectUnauthorized: false } : false
     };
 
 export const dbPool = new Pool(poolConfig);
