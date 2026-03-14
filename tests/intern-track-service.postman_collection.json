@@ -1,0 +1,134 @@
+{
+  "info": {
+    "name": "Inter Track Service - Basic Endpoint Tests",
+    "description": "Basic smoke tests for internship tracking service endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "health"]
+        }
+      }
+    },
+    {
+      "name": "Create Company",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Acme Labs\",\n  \"website\": \"https://acme.dev\",\n  \"industry\": \"Software\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/companies",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "companies"]
+        }
+      }
+    },
+    {
+      "name": "Create Application",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"companyName\": \"Acme Labs\",\n  \"roleTitle\": \"Backend Intern\",\n  \"status\": \"applied\",\n  \"source\": \"LinkedIn\",\n  \"appliedAt\": \"2026-03-01\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/applications",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "applications"]
+        }
+      }
+    },
+    {
+      "name": "List Applications",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/applications?page=1&limit=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "applications"],
+          "query": [
+            { "key": "page", "value": "1" },
+            { "key": "limit", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create Pipeline Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"toStatus\": \"interview\",\n  \"notes\": \"Recruiter screening completed\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/applications/{{applicationId}}/pipeline-events",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "applications", "{{applicationId}}", "pipeline-events"]
+        }
+      }
+    },
+    {
+      "name": "Add Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"direction\": \"inbound\",\n  \"subject\": \"Interview Invitation\",\n  \"bodyPreview\": \"We would like to schedule...\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/applications/{{applicationId}}/emails",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "applications", "{{applicationId}}", "emails"]
+        }
+      }
+    },
+    {
+      "name": "Dashboard Metrics",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "x-user-id", "value": "{{userId}}" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/metrics/dashboard",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "metrics", "dashboard"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3003" },
+    { "key": "userId", "value": "user_123" },
+    { "key": "applicationId", "value": "00000000-0000-0000-0000-000000000000" }
+  ]
+}
