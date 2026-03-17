@@ -7,7 +7,12 @@ import {
   listApplications,
   updateApplication
 } from '../controllers/applicationsController';
-import { addPipelineEvent, listPipelineEvents } from '../controllers/pipelineController';
+import {
+  addPipelineEvent,
+  deletePipelineEvent,
+  listPipelineEvents,
+  updatePipelineEvent,
+} from '../controllers/pipelineController';
 import { addEmail, listEmails } from '../controllers/emailsController';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -96,6 +101,26 @@ router.get(
   [param('id').isUUID()],
   validate,
   asyncHandler(listPipelineEvents)
+);
+
+router.patch(
+  '/:id/pipeline-events/:eventId',
+  [
+    param('id').isUUID(),
+    param('eventId').isUUID(),
+    body('toStatus').optional().isIn(VALID_STATUS),
+    body('notes').optional().isString().trim().isLength({ max: 2000 }),
+    body('eventDate').optional().isISO8601(),
+  ],
+  validate,
+  asyncHandler(updatePipelineEvent),
+);
+
+router.delete(
+  '/:id/pipeline-events/:eventId',
+  [param('id').isUUID(), param('eventId').isUUID()],
+  validate,
+  asyncHandler(deletePipelineEvent),
 );
 
 router.post(
