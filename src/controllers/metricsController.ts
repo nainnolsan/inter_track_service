@@ -115,25 +115,30 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
       .reduce((acc, row) => acc + Number(row.total), 0);
 
   const links = [
-    { source: 0, target: 1, value: totalApplications },
-    { source: 1, target: 2, value: countTransitions(['saved', 'applied'], ['screening']) },
-    { source: 1, target: 5, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
-    { source: 2, target: 3, value: countTransitions(['screening'], ['interview', 'technical']) },
-    { source: 2, target: 5, value: countTransitions(['screening'], ['rejected', 'withdrawn']) },
-    { source: 3, target: 4, value: countTransitions(['interview', 'technical'], ['offer', 'hired']) },
-    { source: 3, target: 5, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
+    { source: 0, target: 1, value: countTransitions(['saved', 'applied'], ['screening']) },
+    { source: 0, target: 4, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
+    { source: 1, target: 2, value: countTransitions(['screening'], ['interview', 'technical']) },
+    { source: 1, target: 5, value: countTransitions(['screening'], ['rejected', 'withdrawn']) },
+    { source: 2, target: 3, value: countTransitions(['interview', 'technical'], ['offer', 'hired']) },
+    { source: 2, target: 6, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
   ].filter((link) => link.value > 0);
+
+  // If there are no transitions yet, show a minimal visible start node flow.
+  if (links.length === 0 && totalApplications > 0) {
+    links.push({ source: 0, target: 1, value: totalApplications });
+  }
 
   res.json({
     success: true,
     data: {
       nodes: [
-        { name: 'All Applications' },
-        { name: 'Applied' },
+        { name: `${totalApplications} Applied` },
         { name: 'OnlineAssessment' },
         { name: 'Interview' },
         { name: 'Offer' },
-        { name: 'Rejected' },
+        { name: 'Rejected/Ghosted (Applied)' },
+        { name: 'Rejected in OA' },
+        { name: 'Rejected in Interview' },
       ],
       links,
     },
