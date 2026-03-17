@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { query } from 'express-validator';
-import { getDashboardMetrics } from '../controllers/metricsController';
+import { getDashboardMetrics, getPipelineFunnelFlow } from '../controllers/metricsController';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -12,5 +12,7 @@ router.get(
   validate,
   asyncHandler(getDashboardMetrics)
 );
+
+router.get('/funnel-flow', asyncHandler(getPipelineFunnelFlow));
 
 export default router;

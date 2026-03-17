@@ -2,6 +2,12 @@ import { Response } from 'express';
 import { query } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 
+type TransitionRow = {
+  from_status: string | null;
+  to_status: string;
+  total: string;
+};
+
 export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const userId = req.userId as string;
   const from = req.query.from ? new Date(String(req.query.from)) : null;
@@ -76,5 +82,60 @@ export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Respon
         outbound: Number(emailsResult.rows[0]?.outbound || 0)
       }
     }
+  });
+};
+
+export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const userId = req.userId as string;
+
+  const totalAppsResult = await query<{ total: string }>(
+    `SELECT COUNT(*)::text AS total
+     FROM applications
+     WHERE user_id = $1 AND archived = FALSE`,
+    [userId]
+  );
+
+  const transitionsResult = await query<TransitionRow>(
+    `WITH unique_transitions AS (
+       SELECT DISTINCT application_id, from_status, to_status
+       FROM pipeline_events
+       WHERE user_id = $1
+     )
+     SELECT from_status, to_status, COUNT(*)::text AS total
+     FROM unique_transitions
+     GROUP BY from_status, to_status`,
+    [userId]
+  );
+
+  const totalApplications = Number(totalAppsResult.rows[0]?.total ?? 0);
+
+  const countTransitions = (fromStatuses: string[], toStatuses: string[]) =>
+    transitionsResult.rows
+      .filter((row) => fromStatuses.includes(row.from_status ?? '') && toStatuses.includes(row.to_status))
+      .reduce((acc, row) => acc + Number(row.total), 0);
+
+  const links = [
+    { source: 0, target: 1, value: totalApplications },
+    { source: 1, target: 2, value: countTransitions(['saved', 'applied'], ['screening']) },
+    { source: 1, target: 5, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
+    { source: 2, target: 3, value: countTransitions(['screening'], ['interview', 'technical']) },
+    { source: 2, target: 5, value: countTransitions(['screening'], ['rejected', 'withdrawn']) },
+    { source: 3, target: 4, value: countTransitions(['interview', 'technical'], ['offer', 'hired']) },
+    { source: 3, target: 5, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
+  ].filter((link) => link.value > 0);
+
+  res.json({
+    success: true,
+    data: {
+      nodes: [
+        { name: 'All Applications' },
+        { name: 'Applied' },
+        { name: 'OnlineAssessment' },
+        { name: 'Interview' },
+        { name: 'Offer' },
+        { name: 'Rejected' },
+      ],
+      links,
+    },
   });
 };
