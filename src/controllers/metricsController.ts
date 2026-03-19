@@ -114,14 +114,21 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
       .filter((row) => fromStatuses.includes(row.from_status ?? '') && toStatuses.includes(row.to_status))
       .reduce((acc, row) => acc + Number(row.total), 0);
 
-  const links = [
+  const STAGE_LINKS = [
     { source: 0, target: 1, value: countTransitions(['saved', 'applied'], ['screening']) },
     { source: 0, target: 4, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
     { source: 1, target: 2, value: countTransitions(['screening'], ['interview', 'technical']) },
     { source: 1, target: 5, value: countTransitions(['screening'], ['rejected', 'withdrawn']) },
     { source: 2, target: 3, value: countTransitions(['interview', 'technical'], ['offer', 'hired']) },
     { source: 2, target: 6, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
-  ].filter((link) => link.value > 0);
+  ];
+
+  const links = STAGE_LINKS.map((link) => ({
+    ...link,
+    // Keep graph topology stable even when a branch has no transitions,
+    // so node columns stay aligned across renders.
+    value: link.value > 0 ? link.value : totalApplications > 0 ? 0.01 : 0,
+  })).filter((link) => link.value > 0);
 
   // If there are no transitions yet, show a minimal visible start node flow.
   if (links.length === 0 && totalApplications > 0) {
