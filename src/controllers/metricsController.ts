@@ -125,21 +125,6 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
 
   const links = transitionLinks.filter((link) => link.value > 0);
 
-  // Recharts Sankey can fail to render when helper links use value=0.
-  // Use a tiny positive integer helper weight so alignment helpers remain
-  // visually small while keeping the graph topology stable.
-  const helperWeight = totalApplications > 0 ? 1 : 0;
-
-  // This enforces visual alignment:
-  // - Rejected/Ghosted (Applied) aligns with OnlineAssessment column.
-  // - Rejected in OA aligns with Interview column.
-  if (helperWeight > 0) {
-    links.push(
-      { source: 4, target: 2, value: helperWeight },
-      { source: 5, target: 3, value: helperWeight }
-    );
-  }
-
   // If there are no transitions yet, show a minimal visible start node flow.
   if (!links.some((link) => link.value > 0) && totalApplications > 0) {
     links.push({ source: 0, target: 1, value: totalApplications });
