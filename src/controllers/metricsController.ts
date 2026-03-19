@@ -114,7 +114,7 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
       .filter((row) => fromStatuses.includes(row.from_status ?? '') && toStatuses.includes(row.to_status))
       .reduce((acc, row) => acc + Number(row.total), 0);
 
-  const STAGE_LINKS = [
+  const transitionLinks = [
     { source: 0, target: 1, value: countTransitions(['saved', 'applied'], ['screening']) },
     { source: 0, target: 4, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
     { source: 1, target: 2, value: countTransitions(['screening'], ['interview', 'technical']) },
@@ -123,15 +123,19 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     { source: 2, target: 6, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
   ];
 
-  const links = STAGE_LINKS.map((link) => ({
-    ...link,
-    // Keep graph topology stable even when a branch has no transitions,
-    // so node columns stay aligned across renders.
-    value: link.value > 0 ? link.value : totalApplications > 0 ? 1 : 0,
-  })).filter((link) => link.value > 0);
+  const links = transitionLinks.filter((link) => link.value > 0);
+
+  // Structural links (value 0) keep node depth stable without adding fake volume.
+  // This enforces visual alignment:
+  // - Rejected/Ghosted (Applied) aligns with OnlineAssessment column.
+  // - Rejected in OA aligns with Interview column.
+  links.push(
+    { source: 4, target: 2, value: 0 },
+    { source: 5, target: 3, value: 0 }
+  );
 
   // If there are no transitions yet, show a minimal visible start node flow.
-  if (links.length === 0 && totalApplications > 0) {
+  if (!links.some((link) => link.value > 0) && totalApplications > 0) {
     links.push({ source: 0, target: 1, value: totalApplications });
   }
 
