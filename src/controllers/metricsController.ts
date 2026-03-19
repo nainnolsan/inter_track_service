@@ -8,6 +8,23 @@ type TransitionRow = {
   total: string;
 };
 
+type StageBucket = 'applied' | 'oa' | 'interview' | 'offer';
+
+const toStageBucket = (status: string | null | undefined): StageBucket | undefined => {
+  if (!status) {
+    return undefined;
+  }
+
+  if (status === 'saved' || status === 'applied') return 'applied';
+  if (status === 'screening') return 'oa';
+  if (status === 'interview' || status === 'technical') return 'interview';
+  if (status === 'offer' || status === 'hired') return 'offer';
+  return undefined;
+};
+
+const isRejected = (status: string | null | undefined): boolean =>
+  status === 'rejected' || status === 'withdrawn';
+
 export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const userId = req.userId as string;
   const from = req.query.from ? new Date(String(req.query.from)) : null;
@@ -109,21 +126,51 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
 
   const totalApplications = Number(totalAppsResult.rows[0]?.total ?? 0);
 
-  const countTransitions = (fromStatuses: string[], toStatuses: string[]) =>
-    transitionsResult.rows
-      .filter((row) => fromStatuses.includes(row.from_status ?? '') && toStatuses.includes(row.to_status))
-      .reduce((acc, row) => acc + Number(row.total), 0);
+  const linksMap = new Map<string, number>();
+  const addLink = (source: number, target: number, value: number) => {
+    if (value <= 0) {
+      return;
+    }
 
-  const transitionLinks = [
-    { source: 0, target: 1, value: countTransitions(['saved', 'applied'], ['screening']) },
-    { source: 0, target: 4, value: countTransitions(['saved', 'applied'], ['rejected', 'withdrawn']) },
-    { source: 1, target: 2, value: countTransitions(['screening'], ['interview', 'technical']) },
-    { source: 1, target: 5, value: countTransitions(['screening'], ['rejected', 'withdrawn']) },
-    { source: 2, target: 3, value: countTransitions(['interview', 'technical'], ['offer', 'hired']) },
-    { source: 2, target: 6, value: countTransitions(['interview', 'technical'], ['rejected', 'withdrawn']) },
-  ];
+    const key = `${source}->${target}`;
+    linksMap.set(key, (linksMap.get(key) ?? 0) + value);
+  };
 
-  const links = transitionLinks.filter((link) => link.value > 0);
+  for (const row of transitionsResult.rows) {
+    const total = Number(row.total);
+    if (!Number.isFinite(total) || total <= 0) {
+      continue;
+    }
+
+    const fromBucket = toStageBucket(row.from_status);
+    const toBucket = toStageBucket(row.to_status);
+    const toRejected = isRejected(row.to_status);
+
+    // Rejections are represented by stage-specific rejected nodes.
+    if (toRejected) {
+      if (fromBucket === 'applied') addLink(0, 4, total);
+      else if (fromBucket === 'oa') addLink(1, 5, total);
+      else if (fromBucket === 'interview' || fromBucket === 'offer') addLink(2, 6, total);
+      continue;
+    }
+
+    // Direct jumps are allowed (e.g. Applied -> Interview, OA -> Offer)
+    if (fromBucket === 'applied' && toBucket === 'oa') addLink(0, 1, total);
+    else if (fromBucket === 'applied' && toBucket === 'interview') addLink(0, 2, total);
+    else if (fromBucket === 'applied' && toBucket === 'offer') addLink(0, 3, total);
+    else if (fromBucket === 'oa' && toBucket === 'interview') addLink(1, 2, total);
+    else if (fromBucket === 'oa' && toBucket === 'offer') addLink(1, 3, total);
+    else if (fromBucket === 'interview' && toBucket === 'offer') addLink(2, 3, total);
+  }
+
+  const links = Array.from(linksMap.entries()).map(([key, value]) => {
+    const [sourceText, targetText] = key.split('->');
+    return {
+      source: Number(sourceText),
+      target: Number(targetText),
+      value,
+    };
+  });
 
   // If there are no transitions yet, show a minimal visible start node flow.
   if (!links.some((link) => link.value > 0) && totalApplications > 0) {
