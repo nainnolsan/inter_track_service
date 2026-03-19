@@ -127,7 +127,7 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     ...link,
     // Keep graph topology stable even when a branch has no transitions,
     // so node columns stay aligned across renders.
-    value: link.value > 0 ? link.value : totalApplications > 0 ? 0.01 : 0,
+    value: link.value > 0 ? link.value : totalApplications > 0 ? 1 : 0,
   })).filter((link) => link.value > 0);
 
   // If there are no transitions yet, show a minimal visible start node flow.
