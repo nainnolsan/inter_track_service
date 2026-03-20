@@ -2,12 +2,6 @@ import { Response } from 'express';
 import { query } from '../config/database';
 import { AuthenticatedRequest } from '../types';
 
-type TransitionRow = {
-  from_status: string | null;
-  to_status: string;
-  total: string;
-};
-
 type ApplicationStatusRow = {
   id: string;
   status: string;
@@ -36,6 +30,14 @@ const toStageBucket = (status: string | null | undefined): StageBucket | undefin
 
 const isRejected = (status: string | null | undefined): boolean =>
   status === 'rejected' || status === 'withdrawn';
+
+const getBucketRank = (bucket: StageBucket | undefined): number => {
+  if (bucket === 'applied') return 0;
+  if (bucket === 'oa') return 1;
+  if (bucket === 'interview') return 2;
+  if (bucket === 'offer') return 3;
+  return -1;
+};
 
 const transitionToLink = (fromBucket: StageBucket | undefined, toBucket: StageBucket | undefined): [number, number] | undefined => {
   if (!fromBucket || !toBucket || fromBucket === toBucket) {
@@ -196,15 +198,21 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
       }
 
       const nextBucket = toStageBucket(event.to_status);
+      const currentRank = getBucketRank(currentBucket);
+      const nextRank = getBucketRank(nextBucket);
+
+      // Ignore backward transitions and duplicates to keep a stable funnel progression.
+      if (!nextBucket || nextRank <= currentRank) {
+        continue;
+      }
+
       const transitionLink = transitionToLink(currentBucket, nextBucket);
 
       if (transitionLink) {
         addLink(transitionLink[0], transitionLink[1], 1);
       }
 
-      if (nextBucket) {
-        currentBucket = nextBucket;
-      }
+      currentBucket = nextBucket;
     }
 
     if (ended) {
@@ -220,6 +228,10 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     }
 
     const finalBucket = toStageBucket(application.status);
+    if (finalBucket && getBucketRank(finalBucket) <= getBucketRank(currentBucket)) {
+      continue;
+    }
+
     const terminalTransition = transitionToLink(currentBucket, finalBucket);
     if (terminalTransition) {
       addLink(terminalTransition[0], terminalTransition[1], 1);
