@@ -8,6 +8,18 @@ type TransitionRow = {
   total: string;
 };
 
+type ApplicationStatusRow = {
+  id: string;
+  status: string;
+};
+
+type PipelineEventRow = {
+  application_id: string;
+  to_status: string;
+  event_date: string;
+  created_at: string;
+};
+
 type StageBucket = 'applied' | 'oa' | 'interview' | 'offer';
 
 const toStageBucket = (status: string | null | undefined): StageBucket | undefined => {
@@ -24,6 +36,28 @@ const toStageBucket = (status: string | null | undefined): StageBucket | undefin
 
 const isRejected = (status: string | null | undefined): boolean =>
   status === 'rejected' || status === 'withdrawn';
+
+const transitionToLink = (fromBucket: StageBucket | undefined, toBucket: StageBucket | undefined): [number, number] | undefined => {
+  if (!fromBucket || !toBucket || fromBucket === toBucket) {
+    return undefined;
+  }
+
+  if (fromBucket === 'applied' && toBucket === 'oa') return [0, 1];
+  if (fromBucket === 'applied' && toBucket === 'interview') return [0, 2];
+  if (fromBucket === 'applied' && toBucket === 'offer') return [0, 3];
+  if (fromBucket === 'oa' && toBucket === 'interview') return [1, 2];
+  if (fromBucket === 'oa' && toBucket === 'offer') return [1, 3];
+  if (fromBucket === 'interview' && toBucket === 'offer') return [2, 3];
+
+  return undefined;
+};
+
+const rejectionToLink = (fromBucket: StageBucket | undefined): [number, number] | undefined => {
+  if (!fromBucket || fromBucket === 'applied') return [0, 4];
+  if (fromBucket === 'oa') return [1, 5];
+  if (fromBucket === 'interview') return [2, 6];
+  return undefined;
+};
 
 export const getDashboardMetrics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   const userId = req.userId as string;
@@ -112,16 +146,19 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     [userId]
   );
 
-  const transitionsResult = await query<TransitionRow>(
-    `WITH unique_transitions AS (
-       SELECT DISTINCT application_id, from_status, to_status
-       FROM pipeline_events
-       WHERE user_id = $1
-     )
-     SELECT from_status, to_status, COUNT(*)::text AS total
-     FROM unique_transitions
-     GROUP BY from_status, to_status`,
+  const applicationsResult = await query<ApplicationStatusRow>(
+    `SELECT id, status
+     FROM applications
+     WHERE user_id = $1 AND archived = FALSE`,
     [userId]
+  );
+
+  const eventsResult = await query<PipelineEventRow>(
+    `SELECT application_id, to_status, event_date::text, created_at::text
+     FROM pipeline_events
+     WHERE user_id = $1
+     ORDER BY application_id ASC, event_date ASC, created_at ASC`,
+    [userId],
   );
 
   const totalApplications = Number(totalAppsResult.rows[0]?.total ?? 0);
@@ -136,31 +173,57 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     linksMap.set(key, (linksMap.get(key) ?? 0) + value);
   };
 
-  for (const row of transitionsResult.rows) {
-    const total = Number(row.total);
-    if (!Number.isFinite(total) || total <= 0) {
+  const eventsByApplication = new Map<string, PipelineEventRow[]>();
+  for (const event of eventsResult.rows) {
+    const collection = eventsByApplication.get(event.application_id) ?? [];
+    collection.push(event);
+    eventsByApplication.set(event.application_id, collection);
+  }
+
+  for (const application of applicationsResult.rows) {
+    const timeline = eventsByApplication.get(application.id) ?? [];
+    let currentBucket: StageBucket = 'applied';
+    let ended = false;
+
+    for (const event of timeline) {
+      if (isRejected(event.to_status)) {
+        const rejectionLink = rejectionToLink(currentBucket);
+        if (rejectionLink) {
+          addLink(rejectionLink[0], rejectionLink[1], 1);
+        }
+        ended = true;
+        break;
+      }
+
+      const nextBucket = toStageBucket(event.to_status);
+      const transitionLink = transitionToLink(currentBucket, nextBucket);
+
+      if (transitionLink) {
+        addLink(transitionLink[0], transitionLink[1], 1);
+      }
+
+      if (nextBucket) {
+        currentBucket = nextBucket;
+      }
+    }
+
+    if (ended) {
       continue;
     }
 
-    const fromBucket = toStageBucket(row.from_status);
-    const toBucket = toStageBucket(row.to_status);
-    const toRejected = isRejected(row.to_status);
-
-    // Rejections are represented by stage-specific rejected nodes.
-    if (toRejected) {
-      if (!fromBucket || fromBucket === 'applied') addLink(0, 4, total);
-      else if (fromBucket === 'oa') addLink(1, 5, total);
-      else if (fromBucket === 'interview') addLink(2, 6, total);
+    if (isRejected(application.status)) {
+      const rejectionLink = rejectionToLink(currentBucket);
+      if (rejectionLink) {
+        addLink(rejectionLink[0], rejectionLink[1], 1);
+      }
       continue;
     }
 
-    // Direct jumps are allowed (e.g. Applied -> Interview, OA -> Offer)
-    if (fromBucket === 'applied' && toBucket === 'oa') addLink(0, 1, total);
-    else if (fromBucket === 'applied' && toBucket === 'interview') addLink(0, 2, total);
-    else if (fromBucket === 'applied' && toBucket === 'offer') addLink(0, 3, total);
-    else if (fromBucket === 'oa' && toBucket === 'interview') addLink(1, 2, total);
-    else if (fromBucket === 'oa' && toBucket === 'offer') addLink(1, 3, total);
-    else if (fromBucket === 'interview' && toBucket === 'offer') addLink(2, 3, total);
+    const finalBucket = toStageBucket(application.status);
+    const terminalTransition = transitionToLink(currentBucket, finalBucket);
+    if (terminalTransition) {
+      addLink(terminalTransition[0], terminalTransition[1], 1);
+    }
   }
 
   const links = Array.from(linksMap.entries())
