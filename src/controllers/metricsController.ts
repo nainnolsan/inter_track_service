@@ -148,9 +148,9 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
 
     // Rejections are represented by stage-specific rejected nodes.
     if (toRejected) {
-      if (fromBucket === 'applied') addLink(0, 4, total);
+      if (!fromBucket || fromBucket === 'applied') addLink(0, 4, total);
       else if (fromBucket === 'oa') addLink(1, 5, total);
-      else if (fromBucket === 'interview' || fromBucket === 'offer') addLink(2, 6, total);
+      else if (fromBucket === 'interview') addLink(2, 6, total);
       continue;
     }
 
@@ -163,14 +163,22 @@ export const getPipelineFunnelFlow = async (req: AuthenticatedRequest, res: Resp
     else if (fromBucket === 'interview' && toBucket === 'offer') addLink(2, 3, total);
   }
 
-  const links = Array.from(linksMap.entries()).map(([key, value]) => {
-    const [sourceText, targetText] = key.split('->');
-    return {
-      source: Number(sourceText),
-      target: Number(targetText),
-      value,
-    };
-  });
+  const links = Array.from(linksMap.entries())
+    .map(([key, value]) => {
+      const [sourceText, targetText] = key.split('->');
+      return {
+        source: Number(sourceText),
+        target: Number(targetText),
+        value,
+      };
+    })
+    .sort((a, b) => {
+      if (a.source !== b.source) {
+        return a.source - b.source;
+      }
+
+      return a.target - b.target;
+    });
 
   // If there are no transitions yet, show a minimal visible start node flow.
   if (!links.some((link) => link.value > 0) && totalApplications > 0) {
