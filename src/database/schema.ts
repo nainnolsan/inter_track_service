@@ -112,6 +112,20 @@ export const schemaStatements: string[] = [
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   `,
+  `
+  CREATE TABLE IF NOT EXISTS user_stage_layouts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    stage_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    is_custom BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, stage_id)
+  );
+  `,
   `CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);`,
   `CREATE INDEX IF NOT EXISTS idx_applications_company_id ON applications(company_id);`,
@@ -125,6 +139,7 @@ export const schemaStatements: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_automation_runs_rule_id ON automation_runs(rule_id);`,
   `CREATE INDEX IF NOT EXISTS idx_automation_runs_application_id ON automation_runs(application_id);`,
   `CREATE INDEX IF NOT EXISTS idx_automation_runs_status ON automation_runs(status);`
+  ,`CREATE INDEX IF NOT EXISTS idx_user_stage_layouts_user_id_position ON user_stage_layouts(user_id, position);`
 ];
 
 export const triggerStatements: string[] = [
@@ -167,6 +182,17 @@ export const triggerStatements: string[] = [
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'automation_rules_set_updated_at') THEN
       CREATE TRIGGER automation_rules_set_updated_at
       BEFORE UPDATE ON automation_rules
+      FOR EACH ROW
+      EXECUTE FUNCTION set_updated_at();
+    END IF;
+  END $$;
+  `,
+  `
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_stage_layouts_set_updated_at') THEN
+      CREATE TRIGGER user_stage_layouts_set_updated_at
+      BEFORE UPDATE ON user_stage_layouts
       FOR EACH ROW
       EXECUTE FUNCTION set_updated_at();
     END IF;
