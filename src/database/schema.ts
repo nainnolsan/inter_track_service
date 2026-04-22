@@ -126,6 +126,17 @@ export const schemaStatements: string[] = [
     UNIQUE(user_id, stage_id)
   );
   `,
+  `
+  CREATE TABLE IF NOT EXISTS job_interactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL,
+    job_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('liked', 'dismissed')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, job_id)
+  );
+  `,
   `CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id);`,
   `CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);`,
   `CREATE INDEX IF NOT EXISTS idx_applications_company_id ON applications(company_id);`,
@@ -193,6 +204,17 @@ export const triggerStatements: string[] = [
     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'user_stage_layouts_set_updated_at') THEN
       CREATE TRIGGER user_stage_layouts_set_updated_at
       BEFORE UPDATE ON user_stage_layouts
+      FOR EACH ROW
+      EXECUTE FUNCTION set_updated_at();
+    END IF;
+  END $$;
+  `,
+  `
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'job_interactions_set_updated_at') THEN
+      CREATE TRIGGER job_interactions_set_updated_at
+      BEFORE UPDATE ON job_interactions
       FOR EACH ROW
       EXECUTE FUNCTION set_updated_at();
     END IF;
